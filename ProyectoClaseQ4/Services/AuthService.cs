@@ -86,6 +86,19 @@ namespace ProyectoClaseQ4.Services
                 throw new Exception($"Error al registrar usuario: {ex.Message}");
             }
         }
+
+        public async Task<AuthResponseDto> Login(LoginDto loginDto)
+        {
+            try
+            {
+                //1. Obtener usuario de Firebase por correo
+                var userCollection = _firebaseService.GetCollection("users");
+            }
+            catch (Exception ex)
+            {
+                
+            }
+        }
     }
 }
 
