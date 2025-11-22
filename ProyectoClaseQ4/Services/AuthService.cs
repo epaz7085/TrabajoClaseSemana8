@@ -86,7 +86,73 @@ namespace ProyectoClaseQ4.Services
                 throw new Exception($"Error al registrar usuario: {ex.Message}");
             }
         }
-        
+
+        public async Task<User?> GetUserByEmail(string email)
+        {
+            try
+            {
+                var userCollection = _firebaseService.GetCollection("users");
+                var query = userCollection.WhereEqualTo("Email", email).Limit(1);
+                var snapshot = await query.GetSnapshotAsync();
+
+                if (snapshot.Count==0)
+                {
+                    return null;
+                }
+
+                var userDoc = snapshot.Documents[0];
+                var userData = userDoc.ToDictionary();
+
+                return new User
+                {
+                    Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
+                    Email = userData["Email"].ToString() ?? String.Empty,
+                    Fullname = userData["FullName"].ToString() ?? String.Empty,
+                    Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
+                    IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
+                    CreatedAt = userData.ContainsKey("CreatedAt")
+                        ? ((Timestamp)userData["CreatedAt"]).ToDateTime()
+                        : DateTime.UtcNow
+                };
+            }
+            catch
+            {
+                throw new NotImplementedException();    
+            }
+        }
+
+        public string GenerateJwtToken(User user)
+        {
+            var jwtKey = _configuration["JwtKey"]
+                ?? throw new InvalidOperationException("JWT Key no configurado"); 
+            var jwtIssuer = _configuration["JwtIssuer"]
+                ?? throw new InvalidOperationException("JWT Issuer no configurado");
+            var jwtAudience = _configuration["JwtAudience"]
+                ?? throw new InvalidOperationException("JWT Audience no configurado");
+            var jwtExpiryInMinutes = int.Parse(_configuration["Jwt:ExpiryInMinutes"] ?? "60");
+            
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Name, user.Fullname),
+                new Claim(ClaimTypes.Role, user.Role),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: jwtIssuer,
+                audience: jwtAudience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(jwtExpiryInMinutes),
+                signingCredentials: credentials
+                );
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
         //Login
         public async Task<AuthResponseDto> Login(LoginDto loginDto)
         {
@@ -151,7 +217,40 @@ namespace ProyectoClaseQ4.Services
             }
             catch (Exception ex)
             {
-                throw new Exception($"Error al registrar usuario: {ex.Message}");
+                throw new Exception($"Error al iniciar sesion con el usuario: {ex.Message}");
+            }
+        }
+
+        public async Task<User?> GetUserById(string userId)
+        {
+            try
+            {
+                var userDoc = await _firebaseService
+                    .GetCollection("users")
+                    .Document(userId)
+                    .GetSnapshotAsync();
+
+                if (!userDoc.Exists)
+                {
+                    return null;
+                }
+
+                var userData = userDoc.ToDictionary();
+                return new User
+                {
+                    Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
+                    Email = userData["Email"].ToString() ?? string.Empty,
+                    Fullname = userData["FullName"].ToString() ?? string.Empty,
+                    Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
+                    IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
+                    CreatedAt = userData.ContainsKey("CreatedAt")
+                        ? ((Timestamp)userData["CreatedAt"]).ToDateTime()
+                        : DateTime.UtcNow
+                };
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
     }
