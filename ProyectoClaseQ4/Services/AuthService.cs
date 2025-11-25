@@ -6,7 +6,6 @@ using Microsoft.IdentityModel.Tokens;
 using ProyectoClaseQ4.DTOs;
 using ProyectoClaseQ4.Models;
 
-
 namespace ProyectoClaseQ4.Services
 {
     public class AuthService : IAuthService
@@ -20,26 +19,25 @@ namespace ProyectoClaseQ4.Services
             _configuration = configuration;
         }
         
-        //Register
+        // Register
         public async Task<AuthResponseDto> Register(RegisterDto registerdto)
         {
             try
             {
-                //1. Verificar si el usuario ya existe
-                var exisingUser = await GetUserByEmail(registerdto.Email);
-
-                if (exisingUser != null)
+                // 1. Verificar si el usuario ya existe
+                var existingUser = await GetUserByEmail(registerdto.Email);
+                if (existingUser != null)
                 {
                     throw new Exception("User with this email already exists");
                 }
                 
-                //2. Generar un ID unico para el usuario
+                // 2. Generar un ID unico para el usuario
                 var userId = Guid.NewGuid().ToString();
                 
-                //3. Hashear la password
+                // 3. Hashear la password
                 var passwordHash = BCrypt.Net.BCrypt.HashPassword(registerdto.Password);
                 
-                //4. Crear documento de usuario en Firestore
+                // 4. Crear documento de usuario en Firestore
                 var user = new User
                 {
                     Id = userId,
@@ -53,7 +51,6 @@ namespace ProyectoClaseQ4.Services
                 var usersCollection = _firebaseService.GetCollection("users");
                 
                 // Guardar usuario con el password hasheado
-
                 var userData = new Dictionary<string, object>()
                 {
                     {"Id", user.Id},
@@ -64,13 +61,12 @@ namespace ProyectoClaseQ4.Services
                     {"IsActive", user.IsActive},
                     {"PasswordHash", passwordHash}
                 };
-
                 await usersCollection.Document(user.Id).SetAsync(userData);
                 
                 // 5. Generar token JWT
                 var token = GenerateJwtToken(user);
                 
-                //6. Retornar respuestas
+                // 6. Retornar respuestas
                 return new AuthResponseDto
                 {
                     Token = token,
@@ -79,7 +75,6 @@ namespace ProyectoClaseQ4.Services
                     FullName = user.Fullname,
                     Role = user.Role
                 };
-
             }
             catch (Exception ex)
             {
@@ -94,20 +89,20 @@ namespace ProyectoClaseQ4.Services
                 var userCollection = _firebaseService.GetCollection("users");
                 var query = userCollection.WhereEqualTo("Email", email).Limit(1);
                 var snapshot = await query.GetSnapshotAsync();
-
-                if (snapshot.Count==0)
+                
+                if (snapshot.Count == 0)
                 {
                     return null;
                 }
-
+                
                 var userDoc = snapshot.Documents[0];
                 var userData = userDoc.ToDictionary();
-
+                
                 return new User
                 {
                     Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
-                    Email = userData["Email"].ToString() ?? String.Empty,
-                    Fullname = userData["FullName"].ToString() ?? String.Empty,
+                    Email = userData["Email"].ToString() ?? string.Empty,
+                    Fullname = userData.ContainsKey("Fullname") ? userData["Fullname"].ToString() ?? string.Empty : string.Empty,
                     Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
                     IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
                     CreatedAt = userData.ContainsKey("CreatedAt")
@@ -115,25 +110,25 @@ namespace ProyectoClaseQ4.Services
                         : DateTime.UtcNow
                 };
             }
-            catch
+            catch (Exception ex)
             {
-                throw new NotImplementedException();    
+                throw new Exception($"Error al obtener usuario por email: {ex.Message}");
             }
         }
 
         public string GenerateJwtToken(User user)
         {
-            var jwtKey = _configuration["JwtKey"]
+            var jwtKey = _configuration["Jwt:Key"]
                 ?? throw new InvalidOperationException("JWT Key no configurado"); 
-            var jwtIssuer = _configuration["JwtIssuer"]
+            var jwtIssuer = _configuration["Jwt:Issuer"]
                 ?? throw new InvalidOperationException("JWT Issuer no configurado");
-            var jwtAudience = _configuration["JwtAudience"]
+            var jwtAudience = _configuration["Jwt:Audience"]
                 ?? throw new InvalidOperationException("JWT Audience no configurado");
             var jwtExpiryInMinutes = int.Parse(_configuration["Jwt:ExpiryInMinutes"] ?? "60");
             
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
+            
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -142,47 +137,52 @@ namespace ProyectoClaseQ4.Services
                 new Claim(ClaimTypes.Role, user.Role),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             };
-
+            
             var token = new JwtSecurityToken(
                 issuer: jwtIssuer,
                 audience: jwtAudience,
                 claims: claims,
                 expires: DateTime.UtcNow.AddMinutes(jwtExpiryInMinutes),
                 signingCredentials: credentials
-                );
+            );
+            
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        //Login
+        // Login
         public async Task<AuthResponseDto> Login(LoginDto loginDto)
         {
             try
             {
-                //1. Obtener usuario de Firebase por correo
+                // 1. Obtener usuario de Firebase por correo
                 var userCollection = _firebaseService.GetCollection("users");
                 var query = userCollection.WhereEqualTo("Email", loginDto.Email).Limit(1);
                 var snapshot = await query.GetSnapshotAsync();
-
+                
                 if (snapshot.Count == 0)
                 {
                     throw new Exception("Credenciales invalidas");
                 }
+                
                 var userDoc = snapshot.Documents[0];
                 
-                //2. Extraer campos manualmente
+                // 2. Extraer campos manualmente
                 var userData = userDoc.ToDictionary();
-                if (userData.ContainsKey("PasswordHash"))
+                
+                // Verificar que SI existe PasswordHash
+                if (!userData.ContainsKey("PasswordHash"))
                 {
-                    throw new Exception("Usuario sin contrasenia  configurada");
+                    throw new Exception("Usuario sin contraseña configurada");
                 }
+                
                 var passwordHash = userData["PasswordHash"].ToString();
                 
-                //3. Crear el objeto User
+                // 3. Crear el objeto User
                 var user = new User
                 {
                     Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
-                    Email = userData.ContainsKey("Email").ToString() ?? string.Empty,
-                    Fullname = userData.ContainsKey("FullName").ToString() ?? string.Empty,
+                    Email = userData.ContainsKey("Email") ? userData["Email"].ToString() ?? string.Empty : string.Empty,
+                    Fullname = userData.ContainsKey("Fullname") ? userData["Fullname"].ToString() ?? string.Empty : string.Empty,
                     Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
                     IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
                     CreatedAt = userData.ContainsKey("CreatedAt")
@@ -190,21 +190,22 @@ namespace ProyectoClaseQ4.Services
                         : DateTime.UtcNow,
                 };
                 
-                // 4. Verificar contrasenia
+                // 4. Verificar contraseña
                 if (string.IsNullOrEmpty(passwordHash) || !BCrypt.Net.BCrypt.Verify(loginDto.Password, passwordHash))
                 {
-                    throw new Exception("Password invalida");
+                    throw new Exception("Credenciales invalidas");
                 }
-                //5. Verificar que el usuario este activo
+                
+                // 5. Verificar que el usuario este activo
                 if (!user.IsActive)
                 {
                     throw new Exception("Usuario inactivo");
                 }
                 
-                //6. Generar token JWT
+                // 6. Generar token JWT
                 var token = GenerateJwtToken(user);
                 
-                //7. Retornar respuesta
+                // 7. Retornar respuesta
                 return new AuthResponseDto
                 {
                     Token = token,
@@ -213,11 +214,10 @@ namespace ProyectoClaseQ4.Services
                     FullName = user.Fullname,
                     Role = user.Role
                 };
-
             }
             catch (Exception ex)
             {
-                throw new Exception($"Error al iniciar sesion con el usuario: {ex.Message}");
+                throw new Exception($"Error al iniciar sesion: {ex.Message}");
             }
         }
 
@@ -229,18 +229,19 @@ namespace ProyectoClaseQ4.Services
                     .GetCollection("users")
                     .Document(userId)
                     .GetSnapshotAsync();
-
+                
                 if (!userDoc.Exists)
                 {
                     return null;
                 }
-
+                
                 var userData = userDoc.ToDictionary();
+                
                 return new User
                 {
                     Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
-                    Email = userData["Email"].ToString() ?? string.Empty,
-                    Fullname = userData["FullName"].ToString() ?? string.Empty,
+                    Email = userData.ContainsKey("Email") ? userData["Email"].ToString() ?? string.Empty : string.Empty,
+                    Fullname = userData.ContainsKey("Fullname") ? userData["Fullname"].ToString() ?? string.Empty : string.Empty,
                     Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
                     IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
                     CreatedAt = userData.ContainsKey("CreatedAt")
@@ -255,4 +256,3 @@ namespace ProyectoClaseQ4.Services
         }
     }
 }
-
