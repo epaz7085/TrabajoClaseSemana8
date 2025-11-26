@@ -8,6 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Registrar servicios
 builder.Services.AddSingleton<FirebaseServices>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<IReportService, ReportService>(); // Nuevo para Report
 
 // Configurar CORS (para que Angular pueda conectarse)
 builder.Services.AddCors(options =>
