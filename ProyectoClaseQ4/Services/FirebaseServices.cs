@@ -1,43 +1,36 @@
-using FirebaseAdmin;
-using FirebaseAdmin.Auth;
-using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
+using Google.Apis.Auth.OAuth2;
+using Google.Cloud.Firestore.V1;
 
-namespace ProyectoClaseQ4.Services;
-
-public class FirebaseServices
+namespace ProyectoClaseQ4.Services
 {
-    private readonly FirestoreDb _firestoreDb;
-    private readonly string _projectId;
-
-    public FirebaseServices(IConfiguration configuration)
+    public class FirebaseServices
     {
-        _projectId = configuration["Firebase:ProjectId"]
-            ?? throw new InvalidOperationException("Firebase ProjectID no configurado");
-        
-        //Inicializar Firebase App si no esta inicializado
-        if (FirebaseApp.DefaultInstance == null)
+        private readonly FirestoreDb _firestoreDb;
+
+        public FirebaseServices(IConfiguration configuration)
         {
-            var credential = GoogleCredential.GetApplicationDefault();
-            FirebaseApp.Create(new AppOptions
-            {
-                Credential = credential,
-                ProjectId = _projectId
-            });
-            
-        }
-        
-        //Crear instancia de Firebase
-        _firestoreDb = FirestoreDb.Create(_projectId);    
-    }
-        
-    public FirestoreDb GetFirestoreDb()
-    {
-        return _firestoreDb;
-    }
+            var credentialsPath = configuration["Firebase:CredentialsPath"];
+            var projectId = configuration["Firebase:ProjectId"];
 
-    public CollectionReference GetCollection(string collectionName)
-    {
-        return _firestoreDb.Collection(collectionName);   
+            GoogleCredential credential = GoogleCredential.FromFile(credentialsPath);
+
+            var builder = new FirestoreClientBuilder
+            {
+                Credential = credential
+            };
+
+            _firestoreDb = FirestoreDb.Create(projectId, builder.Build());
+        }
+
+        public FirestoreDb GetDb()
+        {
+            return _firestoreDb;
+        }
+
+        public CollectionReference GetCollection(string collectionName)
+        {
+            return _firestoreDb.Collection(collectionName);
+        }
     }
 }

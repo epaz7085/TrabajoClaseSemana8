@@ -1,13 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace ProyectoClaseQ4.DTOs;
-
-public class LoginDto
+namespace ProyectoClaseQ4.DTOs
 {
+    public class LoginDto
+    {
     [Required(ErrorMessage ="El email es requerido")]
     [EmailAddress(ErrorMessage ="El email es invalido")]
-    public string Email { get; set; }
+        public string Correo { get; set; }
 
     [Required(ErrorMessage = "El password es requerido")]
-    public string Password { get; set; } = string.Empty;
+        public string Password { get; set; }
+    }
 }

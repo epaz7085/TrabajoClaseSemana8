@@ -18,62 +18,47 @@ namespace ProyectoClaseQ4.Services
             _firebaseService = firebaseService;
             _configuration = configuration;
         }
-        
-        // Register
-        public async Task<AuthResponseDto> Register(RegisterDto registerdto)
+
+        public async Task<AuthResponseDto> Register(RegisterDto dto)
         {
             try
             {
-                // 1. Verificar si el usuario ya existe
-                var existingUser = await GetUserByEmail(registerdto.Email);
-                if (existingUser != null)
-                {
-                    throw new Exception("User with this email already exists");
-                }
-                
-                // 2. Generar un ID unico para el usuario
+                var existing = await GetUserByEmail(dto.Correo);
+                if (existing != null)
+                    throw new Exception("El correo ya está registrado.");
+
                 var userId = Guid.NewGuid().ToString();
-                
-                // 3. Hashear la password
-                var passwordHash = BCrypt.Net.BCrypt.HashPassword(registerdto.Password);
-                
-                // 4. Crear documento de usuario en Firestore
+                var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+
                 var user = new User
                 {
                     Id = userId,
-                    Email = registerdto.Email,
-                    Fullname = registerdto.FullName,
-                    Role = "user",
-                    CreatedAt = DateTime.UtcNow,
-                    IsActive = true,
+                    Nombre = dto.Nombre,
+                    Apellido = dto.Apellido,
+                    Correo = dto.Correo,
+                    PasswordHash = passwordHash,
+                    Edad = dto.Edad,
+                    NumeroIdentidad = dto.NumeroIdentidad,
+                    Genero = dto.Genero,
+                    NumeroTelefono = dto.NumeroTelefono,
+                    EsDonadorOrganos = dto.EsDonadorOrganos,
+                    Rol = "user",
+                    FechaRegistro = Timestamp.GetCurrentTimestamp()
                 };
-                
-                var usersCollection = _firebaseService.GetCollection("users");
-                
-                // Guardar usuario con el password hasheado
-                var userData = new Dictionary<string, object>()
-                {
-                    {"Id", user.Id},
-                    {"Email", user.Email},
-                    {"Fullname", user.Fullname},
-                    {"Role", user.Role},
-                    {"CreatedAt", user.CreatedAt},
-                    {"IsActive", user.IsActive},
-                    {"PasswordHash", passwordHash}
-                };
-                await usersCollection.Document(user.Id).SetAsync(userData);
-                
-                // 5. Generar token JWT
+
+                var col = _firebaseService.GetCollection("grupo_6_usuarios");
+                await col.Document(userId).SetAsync(user);
+
                 var token = GenerateJwtToken(user);
-                
-                // 6. Retornar respuestas
+
                 return new AuthResponseDto
                 {
                     Token = token,
                     UserId = user.Id,
-                    Email = user.Email,
-                    FullName = user.Fullname,
-                    Role = user.Role
+                    Correo = user.Correo,
+                    Nombre = user.Nombre,
+                    Apellido = user.Apellido,
+                    Rol = user.Rol
                 };
             }
             catch (Exception ex)
@@ -82,177 +67,90 @@ namespace ProyectoClaseQ4.Services
             }
         }
 
-        public async Task<User?> GetUserByEmail(string email)
+        public async Task<User?> GetUserByEmail(string correo)
         {
             try
             {
-                var userCollection = _firebaseService.GetCollection("users");
-                var query = userCollection.WhereEqualTo("Email", email).Limit(1);
-                var snapshot = await query.GetSnapshotAsync();
-                
-                if (snapshot.Count == 0)
-                {
+                var col = _firebaseService.GetCollection("grupo_6_usuarios");
+                var query = col.WhereEqualTo("Correo", correo).Limit(1);
+                var snap = await query.GetSnapshotAsync();
+
+                if (snap.Count == 0)
                     return null;
-                }
-                
-                var userDoc = snapshot.Documents[0];
-                var userData = userDoc.ToDictionary();
-                
-                return new User
+
+                return snap.Documents[0].ConvertTo<User>();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public async Task<AuthResponseDto> Login(LoginDto dto)
+        {
+            try
+            {
+                var user = await GetUserByEmail(dto.Correo);
+                if (user == null)
+                    throw new Exception("Credenciales inválidas.");
+
+                if (string.IsNullOrEmpty(user.PasswordHash) ||
+                    !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 {
-                    Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
-                    Email = userData["Email"].ToString() ?? string.Empty,
-                    Fullname = userData.ContainsKey("Fullname") ? userData["Fullname"].ToString() ?? string.Empty : string.Empty,
-                    Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
-                    IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
-                    CreatedAt = userData.ContainsKey("CreatedAt")
-                        ? ((Timestamp)userData["CreatedAt"]).ToDateTime()
-                        : DateTime.UtcNow
+                    throw new Exception("Credenciales inválidas.");
+                }
+
+                var token = GenerateJwtToken(user);
+
+                return new AuthResponseDto
+                {
+                    Token = token,
+                    UserId = user.Id,
+                    Correo = user.Correo,
+                    Nombre = user.Nombre,
+                    Apellido = user.Apellido,
+                    Rol = user.Rol
                 };
             }
             catch (Exception ex)
             {
-                throw new Exception($"Error al obtener usuario por email: {ex.Message}");
+                throw new Exception($"Error al iniciar sesión: {ex.Message}");
             }
         }
 
         public string GenerateJwtToken(User user)
         {
-            var jwtKey = _configuration["Jwt:Key"]
-                ?? throw new InvalidOperationException("JWT Key no configurado"); 
-            var jwtIssuer = _configuration["Jwt:Issuer"]
-                ?? throw new InvalidOperationException("JWT Issuer no configurado");
-            var jwtAudience = _configuration["Jwt:Audience"]
-                ?? throw new InvalidOperationException("JWT Audience no configurado");
-            var jwtExpiryInMinutes = int.Parse(_configuration["Jwt:ExpiryInMinutes"] ?? "60");
-            
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
-            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-            
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Name, user.Fullname),
-                new Claim(ClaimTypes.Role, user.Role),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim("correo", user.Correo),
+                new Claim("nombre", user.Nombre),
+                new Claim("apellido", user.Apellido),
+                new Claim(ClaimTypes.Role, user.Rol)
             };
-            
+
             var token = new JwtSecurityToken(
-                issuer: jwtIssuer,
-                audience: jwtAudience,
+                issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(jwtExpiryInMinutes),
+                expires: DateTime.UtcNow.AddMinutes(60),
                 signingCredentials: credentials
             );
-            
+
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        // Login
-        public async Task<AuthResponseDto> Login(LoginDto loginDto)
+        public async Task<User?> GetUserById(string id)
         {
-            try
-            {
-                // 1. Obtener usuario de Firebase por correo
-                var userCollection = _firebaseService.GetCollection("users");
-                var query = userCollection.WhereEqualTo("Email", loginDto.Email).Limit(1);
-                var snapshot = await query.GetSnapshotAsync();
-                
-                if (snapshot.Count == 0)
-                {
-                    throw new Exception("Credenciales invalidas");
-                }
-                
-                var userDoc = snapshot.Documents[0];
-                
-                // 2. Extraer campos manualmente
-                var userData = userDoc.ToDictionary();
-                
-                // Verificar que SI existe PasswordHash
-                if (!userData.ContainsKey("PasswordHash"))
-                {
-                    throw new Exception("Usuario sin contraseña configurada");
-                }
-                
-                var passwordHash = userData["PasswordHash"].ToString();
-                
-                // 3. Crear el objeto User
-                var user = new User
-                {
-                    Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
-                    Email = userData.ContainsKey("Email") ? userData["Email"].ToString() ?? string.Empty : string.Empty,
-                    Fullname = userData.ContainsKey("Fullname") ? userData["Fullname"].ToString() ?? string.Empty : string.Empty,
-                    Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
-                    IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
-                    CreatedAt = userData.ContainsKey("CreatedAt")
-                        ? ((Timestamp)userData["CreatedAt"]).ToDateTime()
-                        : DateTime.UtcNow,
-                };
-                
-                // 4. Verificar contraseña
-                if (string.IsNullOrEmpty(passwordHash) || !BCrypt.Net.BCrypt.Verify(loginDto.Password, passwordHash))
-                {
-                    throw new Exception("Credenciales invalidas");
-                }
-                
-                // 5. Verificar que el usuario este activo
-                if (!user.IsActive)
-                {
-                    throw new Exception("Usuario inactivo");
-                }
-                
-                // 6. Generar token JWT
-                var token = GenerateJwtToken(user);
-                
-                // 7. Retornar respuesta
-                return new AuthResponseDto
-                {
-                    Token = token,
-                    UserId = user.Id,
-                    Email = user.Email,
-                    FullName = user.Fullname,
-                    Role = user.Role
-                };
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Error al iniciar sesion: {ex.Message}");
-            }
-        }
+            var doc = await _firebaseService
+                .GetCollection("grupo_6_usuarios")
+                .Document(id)
+                .GetSnapshotAsync();
 
-        public async Task<User?> GetUserById(string userId)
-        {
-            try
-            {
-                var userDoc = await _firebaseService
-                    .GetCollection("users")
-                    .Document(userId)
-                    .GetSnapshotAsync();
-                
-                if (!userDoc.Exists)
-                {
-                    return null;
-                }
-                
-                var userData = userDoc.ToDictionary();
-                
-                return new User
-                {
-                    Id = userData.ContainsKey("Id") ? userData["Id"].ToString() : userDoc.Id,
-                    Email = userData.ContainsKey("Email") ? userData["Email"].ToString() ?? string.Empty : string.Empty,
-                    Fullname = userData.ContainsKey("Fullname") ? userData["Fullname"].ToString() ?? string.Empty : string.Empty,
-                    Role = userData.ContainsKey("Role") ? userData["Role"].ToString() ?? "user" : "user",
-                    IsActive = userData.ContainsKey("IsActive") && Convert.ToBoolean(userData["IsActive"]),
-                    CreatedAt = userData.ContainsKey("CreatedAt")
-                        ? ((Timestamp)userData["CreatedAt"]).ToDateTime()
-                        : DateTime.UtcNow
-                };
-            }
-            catch (Exception)
-            {
-                return null;
-            }
+            return doc.Exists ? doc.ConvertTo<User>() : null;
         }
     }
 }

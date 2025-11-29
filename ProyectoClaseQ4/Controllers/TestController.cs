@@ -20,9 +20,8 @@ namespace ProyectoClaseQ4.Controllers
         {
             try
             {
-                var db = _firebaseServices.GetFirestoreDb();
+                var db = _firebaseServices.GetDb();
 
-                //Intentar leer la coleccion de users
                 var usersCollection = _firebaseServices.GetCollection("users");
                 var snapshot = await usersCollection.Limit(1).GetSnapshotAsync();
 

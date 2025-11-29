@@ -7,20 +7,38 @@ namespace ProyectoClaseQ4.Models
     {
         [FirestoreProperty]
         public string Id { get; set; } = string.Empty;
-        
+
         [FirestoreProperty]
-        public string Email { get; set; } = string.Empty;
-        
+        public string Nombre { get; set; } = string.Empty;
+
         [FirestoreProperty]
-        public string Fullname { get; set; } = string.Empty;
-        
+        public string Apellido { get; set; } = string.Empty;
+
         [FirestoreProperty]
-        public string Role { get; set; } = "user"; //"admin" o "user"
-        
+        public string Correo { get; set; } = string.Empty;
+
         [FirestoreProperty]
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        
+        public string PasswordHash { get; set; } = string.Empty;
+
         [FirestoreProperty]
-        public bool IsActive { get; set; } = true;
+        public int Edad { get; set; }
+
+        [FirestoreProperty]
+        public string NumeroIdentidad { get; set; } = string.Empty;
+
+        [FirestoreProperty]
+        public string Genero { get; set; } = string.Empty;
+
+        [FirestoreProperty]
+        public string NumeroTelefono { get; set; } = string.Empty;
+
+        [FirestoreProperty]
+        public bool EsDonadorOrganos { get; set; }
+
+        [FirestoreProperty]
+        public string Rol { get; set; } = "user";
+
+        [FirestoreProperty]
+        public Timestamp FechaRegistro { get; set; } = Timestamp.GetCurrentTimestamp();
     }
 }

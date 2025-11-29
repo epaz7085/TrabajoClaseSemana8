@@ -33,7 +33,7 @@ namespace ProyectoClaseQ4.Services
                     Title = createTaskDto.Title,
                     Description = createTaskDto.Description,
                     AssignedToUserId = createTaskDto.AssignedToUserId,
-                    AssignedToUserName = assignedUser.Fullname,
+                    AssignedToUserName = $"{assignedUser.Nombre} {assignedUser.Apellido}",
                     CreatedByUserId = createdByUserId,
                     CreatedByUserName = createdByUserName,
                     DueDate = createTaskDto.DueDate,
@@ -165,7 +165,7 @@ namespace ProyectoClaseQ4.Services
                     if (assignedUser != null)
                     {
                         updates["AssignedToUserId"] = updateTaskDto.AssignedToUserId;
-                        updates["AssignedToUserName"] = assignedUser.Fullname;
+                        updates["AssignedToUserName"] = $"{assignedUser.Nombre} {assignedUser.Apellido}";
                     }
                 }
 

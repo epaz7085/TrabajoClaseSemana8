@@ -11,6 +11,7 @@ namespace ProyectoClaseQ4.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+
         public AuthController(IAuthService authService)
         {
             _authService = authService;
@@ -19,59 +20,41 @@ namespace ProyectoClaseQ4.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
             try
             {
-                var response = await _authService.Register(registerDto);
-                return Ok(response);
+                var result = await _authService.Register(registerDto);
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                return BadRequest(new {error = ex.Message});
+                return BadRequest(new { error = ex.Message });
             }
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
             try
             {
-                var response = await _authService.Login(loginDto);
-                return Ok(response);
+                var result = await _authService.Login(loginDto);
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                return BadRequest(new {error = ex.Message});
+                return Unauthorized(new { error = ex.Message });
             }
         }
-
-        [HttpGet("me")]
-        [Authorize] // Requiere que se autentique si o si
-        public async Task<IActionResult> GetCurrentUser()
-        {
-            try
-            {
-                //Obtener el ID del usuario del token jwt
-
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                if (string.IsNullOrEmpty(userId))
-                {
-                    return Unauthorized(new {error = "Token no valido"});
-                }
-
-                var user = await _authService.GetUserById(userId);
-                if (user == null)
-                {
-                    return NotFound(new {error = "Usuario no encontrado"});
-                }
-                
-                return Ok(user);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new {error = ex.Message});
-            }
-        }
-        
+    
     }
+
 }
